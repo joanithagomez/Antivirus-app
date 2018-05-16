@@ -3,7 +3,7 @@
 echo <<<_END
   <html><head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
 <title>Malware Detector</title></head>
   <body>
   <div class="container">
@@ -11,7 +11,7 @@ echo <<<_END
   <form method="post" action="index.php" enctype="multipart/form-data">
   Upload your file:
   <input type="file" name="filename">
-  <input type="submit" class="btn btn-success" value="Submit">
+  <input type="submit" class="btn btn-primary" value="Submit">
   </form>
 _END;
 
@@ -22,21 +22,17 @@ _END;
 
       $name = strtolower(preg_replace("[^A-Za-z0-9.]", "", $_FILES['filename']['name']));  //sanitizing name of the file to work in any OS
 
-      if ($_FILES['filename']['type'] === "text/plain") {
-          move_uploaded_file($_FILES['filename']['tmp_name'], $name);  //moving file from the temporary location to permanent one
-          echo "File upload successful!<br>";
-          $contents = getContents($conn, $name); //parse file and get the words in file as an array
+      move_uploaded_file($_FILES['filename']['tmp_name'], $name);  //moving file from the temporary location to permanent one
+      echo "File upload successful!<br>";
+      $contents = getContents($conn, $name); //parse file and get the words in file as an array
 
-          if ($contents) { //if file is not empty,
-              $nameMalware = findMalware($conn, $contents);
-              if ($nameMalware) {
-                  echo "Virus found! Name: ". $nameMalware . "<br>";
-              } else {
-                  echo "Not a malicious file. <br>";
-              }
+      if ($contents) { //if file is not empty,
+          $nameMalware = findMalware($conn, $contents);
+          if ($nameMalware) {
+              echo "Virus found! Name: ". $nameMalware . "<br>";
+          } else {
+              echo "Not an infected file. <br>";
           }
-      } else {
-          echo "'$name' is not an accepted text file<br>";
       }
   } else {
       echo "Please upload a file<br>";
@@ -59,6 +55,36 @@ _END;
       return $contents;
   }
 
+function findMalware($conn, $contents)
+{
+    $query = "SELECT contents from malwares";
+    $result = $conn->query($query);
+    if (!$result) {
+        die($conn->error);
+    }
+
+    $flag= false;
+    $rows = $result->num_rows;
+
+    for ($j = 0 ; $j < $rows ; ++$j) {
+        $result->data_seek($j);
+        $row = $result->fetch_array(MYSQLI_ASSOC);
+        $findme = $row['contents'];
+        $pos  = strpos($findme, $contents);
+        echo "$pos . <br>";
+        if (strpos($findme, $contents) || strpos($contents, $findme)) {
+            $flag = true;
+            break;
+        }
+    }
+    $mname = "";
+    if ($flag) {
+        $mname = getMalwareName($conn, $findme);
+    }
+    $result->close();
+    $conn->close();
+    return $mname;
+}
 
 function getMalwareName($conn, $str)
 {
@@ -74,34 +100,6 @@ function getMalwareName($conn, $str)
     return $row['name'];
 }
 
-function findMalware($conn, $contents)
-{
-    $query = "SELECT contents from malwares";
-    $result = $conn->query($query);
-    if (!$result) {
-        die($conn->error);
-    }
-
-    $flag= false;
-    $rows = $result->num_rows;
-
-    for ($j = 0 ; $j < $rows ; ++$j) {
-        $result->data_seek($j);
-        $row = $result->fetch_array(MYSQLI_ASSOC);
-        $str = $row['contents'];
-
-        if (strpos($contents, $str)) {
-            $flag = true;
-            break;
-        }
-    }
-    if($flag)
-      $mname = getMalwareName($conn, $str);
-
-    $result->close();
-    $conn->close();
-    return $mname;
-}
 
   echo "</div>
 </body></html>";
