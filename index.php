@@ -18,21 +18,25 @@ _END;
 
   include_once 'db.php';
 
-  if ($_FILES) { //check if user uploaded a file
+  if (isset($_FILES['filename'])) { //check if user uploaded a file
 
       $name = strtolower(preg_replace("[^A-Za-z0-9.]", "", $_FILES['filename']['name']));  //sanitizing name of the file to work in any OS
+      if (move_uploaded_file($_FILES['filename']['tmp_name'], $name)) {  //moving file from the temporary location to permanent one
+          echo "File upload successful!<br>";
+          $contents = getData($conn, $name);
 
-      move_uploaded_file($_FILES['filename']['tmp_name'], $name);  //moving file from the temporary location to permanent one
-      echo "File upload successful!<br>";
-      $contents = getContents($conn, $name); //parse file and get the words in file as an array
-
-      if ($contents) { //if file is not empty,
-          $nameMalware = findMalware($conn, $contents);
-          if ($nameMalware) {
-              echo "Virus found! Name: ". $nameMalware . "<br>";
+          if ($contents) { //if file is not empty,
+              $nameMalware = findMalware($conn, $contents);
+              if ($nameMalware) {
+                  echo "Virus found! Name: ". $nameMalware . "<br>";
+              } else {
+                  echo "Not an infected file. <br>";
+              }
           } else {
-              echo "Not an infected file. <br>";
+              echo "File empty";
           }
+      } else {
+          echo "File upload failed.";
       }
   } else {
       echo "Please upload a file<br>";
@@ -40,63 +44,64 @@ _END;
 
 
 
-  function getContents($conn, $file)
+  function getData($conn, $file)
   {
-      if (!function_exists('file_get_contents') || !function_exists('preg_replace')) {  //making sure build-in functions exist
-          echo "Some functions not found. Could not find numbers.";
-          return;
+      $handle = fopen($file, "rb");
+      $fsize = filesize($file);
+      if (!$fsize) {
+          return "";
+      }
+      $data = fread($handle, $fsize);
+      $byteArray = unpack("N*", $data);
+      $binaryData = "";
+      foreach ($byteArray as $key => $block) {
+          $binaryData .= $block;
       }
 
-      $contents = file_get_contents($file);
-      if (empty($contents)) { // if the file is empty display message
-          echo "File is empty.";
-          return;
-      }
-      return $contents;
+      fclose($handle);
+      return $binaryData;
   }
 
 function findMalware($conn, $contents)
 {
-    $query = "SELECT contents from malwares";
+    $query = "SELECT contents from malwares;";
     $result = $conn->query($query);
     if (!$result) {
         die($conn->error);
     }
 
-    $flag= false;
     $rows = $result->num_rows;
+    $mname = "";
 
     for ($j = 0 ; $j < $rows ; ++$j) {
         $result->data_seek($j);
         $row = $result->fetch_array(MYSQLI_ASSOC);
-        $findme = $row['contents'];
-        $pos  = strpos($findme, $contents);
-        echo "$pos . <br>";
-        if (strpos($findme, $contents) || strpos($contents, $findme)) {
-            $flag = true;
+        $str =$row['contents'];
+        // echo "$str <br>";
+        $findme = "/$str/";
+        if (preg_match($findme, $contents) == 1) {
+            $mname = getMalwareName($conn, $str);
             break;
         }
     }
-    $mname = "";
-    if ($flag) {
-        $mname = getMalwareName($conn, $findme);
-    }
+
     $result->close();
-    $conn->close();
     return $mname;
+    // return false;
 }
 
 function getMalwareName($conn, $str)
 {
-    $query = "SELECT name FROM malwares WHERE contents='$str'";
+    $query = "SELECT name FROM malwares WHERE contents='$str';";
     $result = $conn->query($query);
 
     if (!$result) {
         die($conn->error);
     }
     $row = $result->fetch_array(MYSQLI_ASSOC);
-
     $result->close();
+    $conn->close();
+    // echo "Name: " . $row['name'];
     return $row['name'];
 }
 
